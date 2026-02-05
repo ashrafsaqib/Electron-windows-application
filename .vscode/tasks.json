@@ -1,0 +1,49 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Development",
+      "type": "shell",
+      "command": "npm",
+      "args": ["start"],
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^.*$",
+          "file": 1,
+          "location": 2,
+          "message": 3
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*",
+          "endsPattern": "Electron.*started"
+        }
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "Build Windows App (NSIS Installer)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "electron-build"],
+      "group": {
+        "kind": "build"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Build React Only",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "react-build"],
+      "group": {
+        "kind": "build"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "appId": "com.electron-react.app",
+  "productName": "Electron React App",
+  "files": [
+    "build/**/*",
+    "public/electron.js"
+  ],
+  "extraMetadata": {
+    "main": "public/electron.js"
+  },
+  "directories": {
+    "buildResources": "assets",
+    "output": "dist"
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      },
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ],
+    "certificateFile": null,
+    "certificatePassword": null,
+    "signingHashAlgorithms": ["sha256"],
+    "sign": null
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Electron React App"
+  },
+  "publish": null
+}

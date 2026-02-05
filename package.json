@@ -1,0 +1,61 @@
+{
+  "name": "electron-react-app",
+  "version": "1.0.0",
+  "description": "Desktop application built with Electron and React",
+  "main": "public/electron.js",
+  "homepage": "./",
+  "author": "Your Name",
+  "license": "MIT",
+  "scripts": {
+    "react-start": "react-scripts start",
+    "react-build": "react-scripts build",
+    "react-test": "react-scripts test",
+    "react-eject": "react-scripts eject",
+    "electron-start": "set NODE_ENV=development && electron .",
+    "electron-only": "set NODE_ENV=development && electron . --remote-debugging-port=9222",
+    "dev": "concurrently \"npm run react-start\" \"wait-on http://localhost:3000 && npm run electron-start\"",
+    "dev-electron-only": "concurrently \"npm run react-start\" \"wait-on http://localhost:3000 && npm run electron-only\"",
+    "electron-build": "npm run react-build && electron-packager . \"Electron React App\" --asar --out=dist --overwrite --win --arch=x64",
+    "package": "npm run electron-build && node create-installer.js",
+    "build:nsis": "npm run electron-build && node build-nsis.js",
+    "build": "npm run react-build",
+    "start": "npm run dev-electron-only"
+  },
+  "dependencies": {
+    "imap": "^0.8.19",
+    "mailparser": "^3.6.4",
+    "nodemailer": "^6.9.7",
+    "pdfkit": "^0.17.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "archiver": "^7.0.1",
+    "concurrently": "^8.2.2",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4",
+    "electron-is-dev": "^3.0.1",
+    "electron-packager": "^17.1.2",
+    "electron-reloader": "^1.2.1",
+    "electron-winstaller": "^5.4.0",
+    "nsis": "^0.0.0",
+    "wait-on": "^7.0.1"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "build": {
+    "extends": null
+  }
+}
