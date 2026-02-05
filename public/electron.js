@@ -399,6 +399,7 @@ ipcMain.handle('get-today-activities', async (event) => {
 // Monitoring/Polling System
 let monitoringInterval = null;
 let isMonitoring = false;
+let monitoringCycleRunning = false;
 
 // Helper function to log monitoring activities
 const logMonitoringActivity = (message, type = 'info', additionalData = {}) => {
@@ -448,13 +449,16 @@ ipcMain.handle('start-monitoring', async (event, imapSettings, pollingSettings) 
       };
     }
 
-    // Reset stats
-    writeStats({
-      emailsCheckedToday: 0,
-      pdfsGeneratedToday: 0,
-      totalErrors: 0,
-      lastCheckTime: null
-    });
+    // Initialize stats if they don't exist (don't reset existing stats)
+    let existingStats = readStats();
+    if (!existingStats) {
+      writeStats({
+        emailsCheckedToday: 0,
+        pdfsGeneratedToday: 0,
+        totalErrors: 0,
+        lastCheckTime: null
+      });
+    }
 
     // Set monitoring state
     isMonitoring = true;
@@ -470,18 +474,36 @@ ipcMain.handle('start-monitoring', async (event, imapSettings, pollingSettings) 
       checkInterval: pollingSettings.checkInterval,
       emailCount: emailCount
     });
-
+          logMonitoringActivity('❌ Start failed - IMAP settings incomplete', 'error');
     // Function to run monitoring cycle
     const runMonitoringCycle = async () => {
       try {
         const checkTime = new Date().toLocaleTimeString();
         logMonitoringActivity(`🔍 Checking for emails (checking latest ${emailCount} email(s))`, 'log');
 
+        // Update lastCheckTime in stats
+        const currentStats = readStats() || {
+          emailsCheckedToday: 0,
+          pdfsGeneratedToday: 0,
+          totalErrors: 0,
+          lastCheckTime: null
+        };
+        currentStats.lastCheckTime = checkTime;
+        writeStats(currentStats);
+
         // Fetch latest emails
         const fetchResult = await EmailService.fetchInboxEmails(imapSettings, emailCount);
 
         if (!fetchResult.success) {
           logMonitoringActivity(`❌ Fetch error: ${fetchResult.error}`, 'error');
+          
+          // Update error count
+          const stats = readStats();
+          if (stats) {
+            stats.totalErrors = (stats.totalErrors || 0) + 1;
+            writeStats(stats);
+          }
+          
           console.log('[IPC] Sending monitoring-event: error');
           if (mainWindow && mainWindow.webContents) {
             mainWindow.webContents.send('monitoring-event', {
@@ -496,6 +518,20 @@ ipcMain.handle('start-monitoring', async (event, imapSettings, pollingSettings) 
         }
 
         const emails = fetchResult.emails || [];
+        
+        // Update emailsCheckedToday counter
+        const stats = readStats();
+        if (stats) {
+          stats.emailsCheckedToday = (stats.emailsCheckedToday || 0) + emails.length;
+
+
+          writeStats(stats);
+        }
+          if (monitoringCycleRunning) {
+            logMonitoringActivity('⚠️ Previous monitoring cycle still running, skipping this interval', 'warn');
+            return;
+          }
+          monitoringCycleRunning = true;
 
         if (emails.length === 0) {
           logMonitoringActivity(`✓ Checked inbox - no new emails found`, 'log');
@@ -553,6 +589,14 @@ ipcMain.handle('start-monitoring', async (event, imapSettings, pollingSettings) 
 
               if (!parseResult.success) {
                 logMonitoringActivity(`❌ Parse error for ${attachment.filename}: ${parseResult.error}`, 'error');
+                
+                // Update error count
+                const errorStats = readStats();
+                if (errorStats) {
+                  errorStats.totalErrors = (errorStats.totalErrors || 0) + 1;
+                  writeStats(errorStats);
+                }
+                
                 if (mainWindow && mainWindow.webContents) {
                   mainWindow.webContents.send('monitoring-event', {
                     type: 'error',
@@ -579,6 +623,14 @@ ipcMain.handle('start-monitoring', async (event, imapSettings, pollingSettings) 
 
               if (!pdfResult.success) {
                 logMonitoringActivity(`❌ PDF generation error: ${pdfResult.error}`, 'error');
+                
+                // Update error count
+                const pdfErrorStats = readStats();
+                if (pdfErrorStats) {
+                  pdfErrorStats.totalErrors = (pdfErrorStats.totalErrors || 0) + 1;
+                  writeStats(pdfErrorStats);
+                }
+                
                 if (mainWindow && mainWindow.webContents) {
                   mainWindow.webContents.send('monitoring-event', {
                     type: 'error',
@@ -589,6 +641,13 @@ ipcMain.handle('start-monitoring', async (event, imapSettings, pollingSettings) 
                   console.warn('[IPC] mainWindow.webContents not available for monitoring-event!');
                 }
                 continue;
+              }
+
+              // Update PDF generation count
+              const pdfStats = readStats();
+              if (pdfStats) {
+                pdfStats.pdfsGeneratedToday = (pdfStats.pdfsGeneratedToday || 0) + 1;
+                writeStats(pdfStats);
               }
 
               logMonitoringActivity(`✅ Successfully generated PDF: ${pdfResult.filename}`, 'log');
@@ -608,6 +667,14 @@ ipcMain.handle('start-monitoring', async (event, imapSettings, pollingSettings) 
 
             } catch (error) {
               logMonitoringActivity(`❌ Error processing attachment: ${error.message}`, 'error');
+              
+              // Update error count
+              const attachErrorStats = readStats();
+              if (attachErrorStats) {
+                attachErrorStats.totalErrors = (attachErrorStats.totalErrors || 0) + 1;
+                writeStats(attachErrorStats);
+              }
+              
               if (mainWindow && mainWindow.webContents) {
                 mainWindow.webContents.send('monitoring-event', {
                   type: 'error',
@@ -623,6 +690,15 @@ ipcMain.handle('start-monitoring', async (event, imapSettings, pollingSettings) 
 
       } catch (error) {
         logMonitoringActivity(`❌ Monitoring cycle error: ${error.message}`, 'error');
+        
+        // Update error count
+        const cycleErrorStats = readStats();
+        if (cycleErrorStats) {
+          cycleErrorStats.totalErrors = (cycleErrorStats.totalErrors || 0) + 1;
+          cycleErrorStats.lastCheckTime = new Date().toLocaleTimeString();
+          writeStats(cycleErrorStats);
+        }
+        
         if (mainWindow && mainWindow.webContents) {
           mainWindow.webContents.send('monitoring-event', {
             type: 'error',

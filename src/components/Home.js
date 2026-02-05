@@ -2,12 +2,38 @@ import React, { useState, useEffect } from 'react';
 import '../styles/Home.css';
 
 function Home() {
+    // Format date/time in Slovakian format
+    const formatSlovakDateTime = (dateString) => {
+      if (!dateString) return 'Never';
+      let dateObj;
+      // Try ISO or fallback to parsing as local time
+      if (!isNaN(Date.parse(dateString))) {
+        dateObj = new Date(dateString);
+      } else {
+        // Try to parse as time string (e.g., 12:34:56)
+        const today = new Date();
+        const [h, m, s] = (dateString.split(':').map(Number));
+        if (!isNaN(h) && !isNaN(m)) {
+          dateObj = new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, m, s || 0);
+        } else {
+          return dateString;
+        }
+      }
+      return new Intl.DateTimeFormat('sk-SK', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }).format(dateObj);
+    };
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [stats, setStats] = useState({
     emailsCheckedToday: 0,
     pdfsGeneratedToday: 0,
-    lastCheckTime: null,
-    totalErrors: 0
+    lastCheckTime: null
   });
   const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,7 +57,6 @@ function Home() {
       if (window.electronAPI && window.electronAPI.getTodayStats) {
         window.electronAPI.getTodayStats().then(result => {
           if (result.success) {
-            console.log('[Home] Loaded stats from file:', result.stats);
             setStats(result.stats);
           }
         }).catch(err => {
@@ -40,21 +65,31 @@ function Home() {
       }
     };
 
-    // Load stats immediately
+    // Load initial activity log from file
+    const loadActivities = () => {
+      if (window.electronAPI && window.electronAPI.getTodayActivities) {
+        window.electronAPI.getTodayActivities().then(result => {
+          if (result.success && Array.isArray(result.activities)) {
+            // Show most recent first, limit to 20
+            setRecentActivity(result.activities.slice(-20).reverse());
+          }
+        }).catch(err => {
+          console.error('[Home] Error loading activities:', err);
+        });
+      }
+    };
+
+    // Load stats and activities immediately
     loadStats();
+    loadActivities();
 
     // Set up periodic stats loading (every 5 seconds)
     const statsInterval = setInterval(loadStats, 5000);
 
     // Subscribe to monitoring events
     if (window.electronAPI) {
-      console.log('[Home] electronAPI available, setting up listeners');
-      console.log('[Home] electronAPI methods:', Object.keys(window.electronAPI));
-      
       if (window.electronAPI.onMonitoringStarted) {
-        console.log('[Home] Registering onMonitoringStarted listener');
         window.electronAPI.onMonitoringStarted((event, data) => {
-          console.log('[Home] onMonitoringStarted fired with:', event, data);
           setIsMonitoring(true);
           addActivity({
             type: 'started',
@@ -65,21 +100,15 @@ function Home() {
       }
 
       if (window.electronAPI.onMonitoringEvent) {
-        console.log('[Home] Registering onMonitoringEvent listener');
         window.electronAPI.onMonitoringEvent((event, data) => {
-          console.log('[Home] onMonitoringEvent callback fired with:', event, data);
           addActivity(data);
           // Reload stats to get fresh data
           loadStats();
         });
-      } else {
-        console.warn('[Home] onMonitoringEvent not available on electronAPI');
       }
 
       if (window.electronAPI.onMonitoringStopped) {
-        console.log('[Home] Registering onMonitoringStopped listener');
         window.electronAPI.onMonitoringStopped((event, data) => {
-          console.log('[Home] onMonitoringStopped fired with:', event, data);
           setIsMonitoring(false);
           addActivity({
             type: 'stopped',
@@ -88,8 +117,6 @@ function Home() {
           });
         });
       }
-    } else {
-      console.warn('[Home] electronAPI not available');
     }
 
     // Cleanup listeners and interval on unmount
@@ -176,21 +203,14 @@ function Home() {
           </div>
         </div>
 
-        <div className="stat-card">
-          <div className="stat-icon">⚠️</div>
-          <div className="stat-info">
-            <h3>Errors</h3>
-            <p className="stat-value">{stats.totalErrors}</p>
-            <span className="stat-label">Today</span>
-          </div>
-        </div>
+        {/* Removed Errors stat card */}
 
         <div className="stat-card">
           <div className="stat-icon">🕐</div>
           <div className="stat-info">
             <h3>Last Check</h3>
             <p className="stat-value" style={{ fontSize: '0.9rem' }}>
-              {stats.lastCheckTime || 'Never'}
+              {formatSlovakDateTime(stats.lastCheckTime)}
             </p>
             <span className="stat-label">Recent</span>
           </div>
@@ -225,25 +245,11 @@ function Home() {
                     <p className="activity-meta">File: {activity.file}</p>
                   )}
                 </div>
-                <span className="activity-time">{activity.timestamp}</span>
+                <span className="activity-time">{formatSlovakDateTime(activity.timestamp)}</span>
               </div>
             ))}
           </div>
         )}
-      </div>
-
-      {/* Info Box */}
-      <div className="info-section">
-        <h3>ℹ️ How to Use</h3>
-        <ol>
-          <li>Go to <strong>Settings</strong> → <strong>⚙️ Polling Monitor</strong></li>
-          <li>Configure check interval, email count, and PDF save folder</li>
-          <li>Click <strong>▶️ Start Monitoring</strong> to begin automated email checking</li>
-          <li>Monitor will check for new emails at regular intervals</li>
-          <li>XLSX attachments will be automatically parsed and converted to PDFs</li>
-          <li>Check this dashboard to see recent activity and statistics</li>
-          <li>Click <strong>⏹️ Stop Monitoring</strong> to disable automated checking</li>
-        </ol>
       </div>
     </div>
   );

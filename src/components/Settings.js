@@ -2,6 +2,18 @@ import React, { useState, useEffect } from 'react';
 import '../styles/Settings.css';
 
 function Settings() {
+    // Helper to sync monitoring status from backend
+    const syncMonitoringStatus = async () => {
+      if (window.electronAPI && window.electronAPI.getMonitoringStatus) {
+        try {
+          const status = await window.electronAPI.getMonitoringStatus();
+          setPollingSettings(prev => ({ ...prev, isMonitoring: !!status.isMonitoring }));
+        } catch (err) {
+          // fallback: assume not monitoring
+          setPollingSettings(prev => ({ ...prev, isMonitoring: false }));
+        }
+      }
+    };
   const [smtpSettings, setSmtpSettings] = useState({
     host: '',
     port: '587',
@@ -50,6 +62,9 @@ function Settings() {
       setPollingSettings(JSON.parse(savedPollingSettings));
     }
 
+    // Always sync monitoring status on mount
+    syncMonitoringStatus();
+
     // Intercept console.log to capture logs
     const originalLog = console.log;
     const originalError = console.error;
@@ -96,6 +111,13 @@ function Settings() {
     };
   }, []);
 
+  // Sync monitoring status when switching to polling tab
+  useEffect(() => {
+    if (activeTab === 'polling') {
+      syncMonitoringStatus();
+    }
+  }, [activeTab]);
+
   const handleSmtpInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     setSmtpSettings(prev => ({
@@ -127,6 +149,12 @@ function Settings() {
   };
 
   const handlePollingInputChange = (fieldName, value) => {
+    if (fieldName === 'checkInterval') {
+      if (value < 30) {
+        alert('Check interval must be at least 30 seconds.');
+        value = 30;
+      }
+    }
     setPollingSettings(prev => ({
       ...prev,
       [fieldName]: value
@@ -349,7 +377,7 @@ function Settings() {
   return (
     <div className="settings-container">
       <h1>Settings</h1>
-      
+
       <div className="tabs">
         <button
           className={`tab-button ${activeTab === 'smtp' ? 'active' : ''}`}
@@ -376,6 +404,22 @@ function Settings() {
           ⚙️ Polling Monitor
         </button>
       </div>
+
+      {/* Show info-section only in Polling Monitor tab */}
+      {activeTab === 'polling' && (
+        <div className="info-section" style={{ marginBottom: 24 }}>
+          <h3>ℹ️ How to Use</h3>
+          <ol>
+            <li>Go to <strong>Settings</strong> → <strong>⚙️ Polling Monitor</strong></li>
+            <li>Configure check interval, email count, and PDF save folder</li>
+            <li>Click <strong>▶️ Start Monitoring</strong> to begin automated email checking</li>
+            <li>Monitor will check for new emails at regular intervals</li>
+            <li>XLSX attachments will be automatically parsed and converted to PDFs</li>
+            <li>Check the dashboard to see recent activity and statistics</li>
+            <li>Click <strong>⏹️ Stop Monitoring</strong> to disable automated checking</li>
+          </ol>
+        </div>
+      )}
 
       {activeTab === 'smtp' && (
         <>
@@ -702,7 +746,6 @@ function Settings() {
                   value={pollingSettings.checkInterval}
                   onChange={(e) => handlePollingInputChange('checkInterval', parseInt(e.target.value) || 300)}
                   placeholder="e.g., 300"
-                  disabled={pollingSettings.isMonitoring}
                 />
                 <small>Minimum 30 seconds. Check every this many seconds for new emails.</small>
               </div>
@@ -717,7 +760,6 @@ function Settings() {
                   value={pollingSettings.emailCount}
                   onChange={(e) => handlePollingInputChange('emailCount', parseInt(e.target.value) || 1)}
                   placeholder="e.g., 5"
-                  disabled={pollingSettings.isMonitoring}
                 />
                 <small>Check how many of the latest emails for XLSX attachments (1-50).</small>
               </div>
@@ -729,7 +771,6 @@ function Settings() {
                   value={pollingSettings.pdfFolder}
                   onChange={(e) => handlePollingInputChange('pdfFolder', e.target.value)}
                   placeholder={`e.g., C:\\Users\\YourName\\Documents\\PDFs`}
-                  disabled={pollingSettings.isMonitoring}
                 />
                 <small>Full path where PDF files will be saved. Leave empty to use Downloads folder.</small>
               </div>
