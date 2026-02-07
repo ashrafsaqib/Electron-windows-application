@@ -50,6 +50,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   removeMonitoringListener: (channel) => {
     ipcRenderer.removeAllListeners(channel);
+  },
+  testXlsxToPdf: (pdfFolder) => {
+    return ipcRenderer.invoke('test-xlsx-to-pdf', pdfFolder);
   }
 });
 

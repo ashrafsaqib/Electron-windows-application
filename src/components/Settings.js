@@ -205,6 +205,32 @@ function Settings() {
     }
   };
 
+  const handleTestConversion = async () => {
+    if (!window.electronAPI || !window.electronAPI.testXlsxToPdf) {
+      alert('❌ Test conversion API not available.');
+      return;
+    }
+
+    if (!pollingSettings.pdfFolder) {
+      alert('❌ Please configure the PDF Save Folder first.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await window.electronAPI.testXlsxToPdf(pollingSettings.pdfFolder);
+      if (result.success) {
+        alert(`✅ Test conversion successful!\n\n📂 Source: ${result.xlsxPath}\n📄 Output: ${result.pdfPath}\n\n📊 First cell content:\n${result.firstCellValue}`);
+      } else {
+        alert(`❌ Error: ${result.error}`);
+      }
+    } catch (error) {
+      alert(`❌ Error: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleTestSmtpConnection = async () => {
     if (!testEmail) {
       setTestMessage('Please enter a test email address');
@@ -803,6 +829,13 @@ function Settings() {
               >
                 ⏹️ Stop Monitoring
               </button>
+              <button
+                className="btn btn-secondary"
+                onClick={handleTestConversion}
+                disabled={loading || !pollingSettings.pdfFolder}
+              >
+                🧪 Test Conversion
+              </button>
             </div>
 
             {/* Info Box */}
@@ -813,6 +846,7 @@ function Settings() {
                 <li>Every {pollingSettings.checkInterval} seconds, the latest {pollingSettings.emailCount} email(s) will be checked</li>
                 <li>XLSX attachments found in emails will have their first cell (A1) extracted</li>
                 <li>A PDF file will be generated with the cell content and saved to your configured folder</li>
+                <li>Use the <strong>Test Conversion</strong> button to verify the setup: place an example.xlsx file in your PDF folder and it will generate test.pdf</li>
                 <li>Use the Logs tab to see what's been processed</li>
               </ul>
             </div>

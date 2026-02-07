@@ -770,4 +770,188 @@ ipcMain.handle('get-monitoring-status', async (event) => {
   };
 });
 
+// Test conversion: read test.xlsx and create test.pdf using HTML template
+ipcMain.handle('test-xlsx-to-pdf', async (event, pdfFolder) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const xlsx = require('xlsx');
+    const puppeteer = require('puppeteer');
+    
+    // Use the provided PDF folder path
+    const folderPath = pdfFolder || path.join(os.homedir(), 'Downloads');
+    const xlsxPath = path.join(folderPath, 'example.xlsx');
+    const pdfPath = path.join(folderPath, 'test.pdf');
+    const templatePath = path.join(__dirname, 'templates', 'source.html');
+    
+    console.log(`[Test Conversion] Looking for example.xlsx at: ${xlsxPath}`);
+    
+    // Check if example.xlsx exists
+    if (!fs.existsSync(xlsxPath)) {
+      return {
+        success: false,
+        error: `example.xlsx not found at: ${xlsxPath}. Please place the file in the configured PDF folder.`
+      };
+    }
+    
+    // Check if template exists
+    if (!fs.existsSync(templatePath)) {
+      return {
+        success: false,
+        error: `Template not found at: ${templatePath}`
+      };
+    }
+    
+    console.log(`[Test Conversion] Reading example.xlsx...`);
+    
+    // Read the Excel file
+    const workbook = xlsx.readFile(xlsxPath);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    
+    // Convert to JSON for easier data access (rows as arrays)
+    const data = xlsx.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+    
+    console.log(`[Test Conversion] Parsed ${data.length} rows from Excel`);
+    
+    // Read HTML template
+    let htmlContent = fs.readFileSync(templatePath, 'utf8');
+    
+    // Map Excel data to template variables (example.xlsx structure)
+    // Row 1 (index 0): Sheet title in column B
+    // Row 2 (index 1): Optional reference in column F (e.g. GFK 959)
+    // Row 5 (index 4): Employee name in column C, Month/Year in column F
+    // Items: Rows where column A is like "3." and column D has a number (duration)
+    // Totals: Row where column A is empty and column D has a number (total hours)
+
+    const formatNumberGerman = (value, decimals = 2) => {
+      if (typeof value !== 'number' || Number.isNaN(value)) return '';
+      return value.toFixed(decimals).replace('.', ',');
+    };
+
+    const formatTimeValue = (value) => {
+      if (typeof value !== 'number' || Number.isNaN(value)) return '';
+      return formatNumberGerman(value, 2);
+    };
+
+    const invoiceRef = data[1]?.[5] || '';
+    const monthYear = data[4]?.[5] || '';
+    const employeeName = data[4]?.[2] || '';
+
+    const replacements = {
+      invoiceNumber: invoiceRef || '2026/0005',
+      createdDate: monthYear || '',
+      deliveryDate: monthYear || '',
+      dueDate: monthYear || '',
+
+      customerName: employeeName || '',
+      customerAddress: '',
+      customerCity: '',
+      customerCountry: '',
+
+      customerId: '',
+      customerVatId: '',
+
+      paymentMethod: '',
+      paymentReference: invoiceRef || '',
+      iban: '',
+      swift: '',
+    };
+    
+    // Generate items table rows
+    let itemsHtml = '';
+    let durationSum = 0;
+
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      const posCell = String(row?.[0] || '').trim();
+      const duration = typeof row?.[3] === 'number' ? row[3] : null;
+      const description = row?.[4] || '';
+
+      if (!posCell || !/\d+\./.test(posCell) || duration === null) {
+      continue;
+      }
+
+      const beginVal = formatTimeValue(row?.[1]);
+      const endVal = formatTimeValue(row?.[2]);
+      const subDescription = (beginVal || endVal) ? `Beginn ${beginVal} – Ende ${endVal}` : '';
+
+      durationSum += duration;
+
+      itemsHtml += `
+          <tr>
+            <td class="center">${posCell}</td>
+            <td>
+              <div class="item-desc">${description}</div>
+              ${subDescription ? `<div class="item-sub-desc">${subDescription}</div>` : ''}
+            </td>
+            <td class="right">${formatNumberGerman(duration)}</td>
+            <td class="right">
+              <span></span>
+            </td>
+            <td class="right">
+              <span>${formatNumberGerman(duration)}</span>
+            </td>
+          </tr>`;
+    }
+
+    const totalRow = data.find((row) => {
+      const a = String(row?.[0] || '').trim();
+      return !a && typeof row?.[3] === 'number';
+    });
+    const totalHours = typeof totalRow?.[3] === 'number' ? totalRow[3] : durationSum;
+
+    replacements.items = itemsHtml;
+    replacements.grandTotal = formatNumberGerman(totalHours);
+    replacements.summe = formatNumberGerman(totalHours);
+    
+    // Replace all placeholders in HTML
+    Object.keys(replacements).forEach(key => {
+      const regex = new RegExp(`{{${key}}}`, 'g');
+      htmlContent = htmlContent.replace(regex, replacements[key]);
+    });
+    
+    console.log(`[Test Conversion] Generating PDF with Puppeteer...`);
+    
+    // Launch Puppeteer and generate PDF
+    const browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    
+    const page = await browser.newPage();
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+    
+    await page.pdf({
+      path: pdfPath,
+      format: 'A4',
+      printBackground: true,
+      margin: {
+        top: '20mm',
+        right: '15mm',
+        bottom: '20mm',
+        left: '15mm'
+      }
+    });
+    
+    await browser.close();
+    
+    console.log(`[Test Conversion] PDF saved successfully: ${pdfPath}`);
+    
+    return {
+      success: true,
+      xlsxPath: xlsxPath,
+      pdfPath: pdfPath,
+      firstCellValue: data[0]?.[0] || 'N/A',
+      message: `Test conversion completed successfully! Processed ${data.length} rows.`
+    };
+  } catch (error) {
+    console.error('[Test Conversion] Error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to perform test conversion'
+    };
+  }
+});
+
 

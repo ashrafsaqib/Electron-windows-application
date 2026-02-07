@@ -26,6 +26,7 @@
     "mailparser": "^3.6.4",
     "nodemailer": "^6.9.7",
     "pdfkit": "^0.17.2",
+    "puppeteer": "^24.36.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
